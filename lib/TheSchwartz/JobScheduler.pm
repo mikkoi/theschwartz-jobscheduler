@@ -62,7 +62,6 @@ use warnings;
 
     my $client = TheSchwartz::JobScheduler->new(
         databases => \@databases,
-        get_dbh => \&get_dbh,
         );
     my $job_id = $client->insert('funcname', $arg);
 
@@ -302,31 +301,7 @@ sub insert {
     foreach my $database_id ( keys %{ $databases } ) {
         my $db = $databases->{ $database_id };
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): db: %s', $db );
-        my $cb = $db->{'dbh_callback'};
-        my $dbh;
-        if( ref $cb eq 'CODE' ) {
-            $dbh = &{ $cb }( $database_id );
-        } else {
-            my $dbh_callback_code = $db->{'dbh_callback'};
-            # $log->debugf( 'TheSchwartz::JobScheduler::insert(): dbh_callback_code: %s', $dbh_callback_code );
-            my ($module, $creator) = split qr/\-\>/msx, $dbh_callback_code;
-            local $EVAL_ERROR = undef;
-            my $r = eval { load $module };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot load dbh_callback: ', $module;
-            }
-            my $callback;
-            local $EVAL_ERROR = undef;
-            $r = eval { $callback = $module->instance() };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot instantiate dbh_callback: ', "$module->$creator";
-            }
-            local $EVAL_ERROR = undef;
-            $r = eval { $dbh = $callback->dbh( $database_id ) };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot get dbh from callback: ', "$module->$creator->dbh( $database_id )";
-            }
-        }
+        my $dbh = get_dbh( $database_id, $db->{ 'dbh_callback' } );
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): dbh: %s', $dbh );
         my $prefix = $databases->{ $database_id }->{'prefix'};
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): prefix: %s', $prefix );
@@ -461,31 +436,7 @@ sub list_jobs {
     my $databases = $self->databases;
     foreach my $database_id ( keys %{ $databases } ) {
         my $db = $databases->{ $database_id };
-        my $cb = $db->{'dbh_callback'};
-        my $dbh;
-        if( ref $cb eq 'CODE' ) {
-            $dbh = &{ $cb }( $database_id );
-        } else {
-            my $dbh_callback_code = $db->{'dbh_callback'};
-            # $log->debugf( 'TheSchwartz::JobScheduler::insert(): dbh_callback_code: %s', $dbh_callback_code );
-            my ($module, $creator) = split qr/\-\>/msx, $dbh_callback_code;
-            local $EVAL_ERROR = undef;
-            my $r = eval { load $module };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot load dbh_callback: ', $module;
-            }
-            my $callback;
-            local $EVAL_ERROR = undef;
-            $r = eval { $callback = $module->instance() };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot instantiate dbh_callback: ', "$module->$creator";
-            }
-            local $EVAL_ERROR = undef;
-            $r = eval { $dbh = $callback->dbh( $database_id ) };
-            if( $EVAL_ERROR ) {
-                croak 'Cannot get dbh from callback: ', "$module->$creator->dbh( $database_id )";
-            }
-        }
+        my $dbh = get_dbh( $database_id, $db->{ 'dbh_callback' } );
         my $prefix = $databases->{ $database_id }->{'prefix'};
 
         local $EVAL_ERROR = undef;
@@ -556,6 +507,39 @@ sub _cond_thaw {
         return $data;
     }
 }
+
+sub get_dbh {
+    my ($database_id, $dbh_callback) = @_;
+
+    # my $cb = $dbh_callback;
+    my $dbh;
+    if( ref $dbh_callback eq 'CODE' ) {
+        $dbh = &{ $dbh_callback }( $database_id );
+    } else {
+        my $dbh_callback_code = $dbh_callback;
+        my ($module, $creator) = split qr/\-\>/msx, $dbh_callback_code;
+        local $EVAL_ERROR = undef;
+        my $r = eval { load $module };
+        if( $EVAL_ERROR ) {
+            croak q{Cannot load dbh_callback module '}, $module, q{'};
+        }
+        my $callback;
+        local $EVAL_ERROR = undef;
+        $r = eval { $callback = $module->$creator() };
+        if( $EVAL_ERROR ) {
+            croak q{Cannot instantiate dbh_callback module '}, "$module->$creator", q{'};
+        }
+        local $EVAL_ERROR = undef;
+        $r = eval { $dbh = $callback->dbh( $database_id ) };
+        if( $EVAL_ERROR ) {
+            croak q{Cannot get dbh from callback '}, "$module->$creator->dbh( $database_id )" ,q{'};
+        }
+    }
+
+    return $dbh;
+}
+
+
 =head1 THANKS
 
 This module is very much inspired by L<TheSchwartz::Simple>.
