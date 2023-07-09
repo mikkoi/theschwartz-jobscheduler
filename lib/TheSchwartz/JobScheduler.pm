@@ -249,8 +249,9 @@ use Carp;
 use English '-no_match_vars';
 use Storable;
 use Module::Load qw( load );
-
 use Scalar::Util qw( refaddr );
+
+use Moo;
 use Log::Any qw( $log ), hooks => { build_context => [ \&build_context, ], };
 use Log::Any::Adapter::Util;
 sub build_context {
@@ -264,17 +265,27 @@ sub build_context {
 
 use TheSchwartz::JobScheduler::Job;
 
-sub new {
-    my ($class, $databases) = @_;
-    return bless {
-        databases => $databases,
-        _funcmap  => {},
-    }, $class;
-}
+has databases => (
+    is => 'ro',
+    required => 1,
+);
+
+has _funcmap => (
+    is => 'ro',
+    default => sub { {}; },
+);
+
+# sub new {
+#     my ($class, $databases) = @_;
+#     return bless {
+#         databases => $databases,
+#         _funcmap  => {},
+#     }, $class;
+# }
 
 sub insert {
     my $self = shift;
-    my $databases = $self->{databases};
+    my $databases = $self->databases;
 
     my $job;
     if ( $_[0]->isa( 'TheSchwartz::JobScheduler::Job' ) ) {
@@ -364,17 +375,17 @@ sub funcname_to_id {
     # my ( $dbh, $prefix ) = ($database->dbh, $database->prefix);
 
     my $dbid = refaddr $dbh;
-    unless ( exists $self->{_funcmap}{$dbid} ) {
+    unless ( exists $self->_funcmap->{$dbid} ) {
         my $sth
             = $dbh->prepare_cached("SELECT funcid, funcname FROM ${prefix}funcmap");
         $sth->execute;
         while ( my $row = $sth->fetchrow_arrayref ) {
-            $self->{_funcmap}{$dbid}{ $row->[1] } = $row->[0];
+            $self->_funcmap->{$dbid}{ $row->[1] } = $row->[0];
         }
         $sth->finish;
     }
 
-    unless ( exists $self->{_funcmap}{$dbid}{$funcname} ) {
+    unless ( exists $self->_funcmap->{$dbid}{$funcname} ) {
         ## This might fail in a race condition since funcname is UNIQUE
         my $sth = $dbh->prepare_cached(
             "INSERT INTO ${prefix}funcmap (funcname) VALUES (?)");
@@ -392,11 +403,11 @@ sub funcname_to_id {
                 or croak "Can't find or create funcname $funcname: $EVAL_ERROR";
         }
 
-        $self->{_funcmap}{$dbid}{$funcname} = $id;
+        $self->_funcmap->{$dbid}{$funcname} = $id;
     }
 
-    $log->debugf( 'TheSchwartz::JobScheduler::funcname_to_id(): %s', $self->{_funcmap}{$dbid}{$funcname} );
-    return $self->{_funcmap}{$dbid}{$funcname};
+    $log->debugf( 'TheSchwartz::JobScheduler::funcname_to_id(): %s', $self->_funcmap->{$dbid}{$funcname} );
+    return $self->_funcmap->{$dbid}{$funcname};
 }
 
 sub _insert_id {
@@ -447,7 +458,7 @@ sub list_jobs {
     }
 
     my @jobs;
-    my $databases = $self->{databases};
+    my $databases = $self->databases;
     foreach my $database_id ( keys %{ $databases } ) {
         my $db = $databases->{ $database_id };
         my $cb = $db->{'dbh_callback'};

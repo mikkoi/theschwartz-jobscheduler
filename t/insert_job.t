@@ -138,7 +138,7 @@ subtest 'Insert Job and Verify' => sub {
             };
         }
         my $client = TheSchwartz::JobScheduler->new(
-            \%databases, # databases
+            databases => \%databases,
             );
 
         # &{ $get_dbh }()->start_work;
