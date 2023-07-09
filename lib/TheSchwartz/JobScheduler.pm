@@ -214,17 +214,20 @@ following values:
 
 =over 8
 
-=item B<pass>
+=item B<no_check>
 
 This option does not do any checking on the condition. If the database
 is configured to not allow an insert operation, it will throw
 an exception. User must be prepared for this, for instance,
 by enclosing the operation in C<eval>.
 
+This is the default setting.
+
 =item B<overwrite>
 
 Update the fields C<arg>, C<insert_time>, C<run_after>, C<grabbed_until>,
 C<priority> and C<coalesce>, and return the existing entry's C<jobid>.
+This setting will create a slight overhead.
 
 Not yet implemented.
 
@@ -232,15 +235,39 @@ Not yet implemented.
 
 If there is already a matching entry (C<funcid> and C<uniqkey> fields),
 no change will be made. The C<jobid> of the existing entry will be returned.
+This setting will create a slight overhead.
 
 =back
 
-    my $client = TheSchwartz::JobScheduler->new(
+B<N.B. This option is used only when TheSchwartz::JobScheduler::Job has
+set the field C<uniqkey>.
+If you don't use uniqkey, this problem will never arise.>
+
+B<N.B.2. Using either c<overwrite> or C<acknowledge> is the recommended
+value. Only in situations which require extreme throughput, should you
+consider other alternatives for this problem.>
+
+    # Depending on the database table settings,
+    # this will either throw an exception or
+    # it will pass and result with invalid table data.
+    my $scheduler = TheSchwartz::JobScheduler->new(
         databases => \@databases,
         opts => {
-            handle_uniqkey => 'acknowledge',
+            handle_uniqkey => 'no_check',
         },
     );
+    my $job = TheSchwartz::JobScheduler::Job->new(
+        funcname => 'Test::uniqkey',
+        arg      => { an_item => 'value A' },
+        uniqkey  => 'UNIQUE_STR_A',
+        );
+    $scheduler->insert( $job );
+    $job = TheSchwartz::JobScheduler::Job->new(
+        funcname => 'Test::uniqkey',
+        arg      => { an_item => 'value B' },
+        uniqkey  => 'UNIQUE_STR_A',
+        );
+    $scheduler->insert( $job );
 
 =cut
 
@@ -272,6 +299,11 @@ has databases => (
 has _funcmap => (
     is => 'ro',
     default => sub { {}; },
+);
+
+has opts => (
+    is => 'ro',
+    default => sub { { handle_uniqkey => 'pass', }; },
 );
 
 # sub new {
@@ -307,11 +339,40 @@ sub insert {
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): prefix: %s', $prefix );
 
         my $jobid;
-        local $EVAL_ERROR = undef;
-        my $r = eval {
+        # local $EVAL_ERROR = undef;
+        # my $r = eval {
             # $job->funcid( $self->funcname_to_id( $database, $job->funcname ) );
             $job->funcid( $self->funcname_to_id( $dbh, $prefix, $job->funcname ) );
             $job->insert_time(time);
+
+            if( $job->uniqkey && $self->opts->{'handle_uniqkey'} eq 'acknowledge' ) {
+                my $row = $job->as_hashref;
+                my @query_cols = qw( jobid );
+                my @where_cols = qw( funcid uniqkey );
+                my $sql = sprintf 'SELECT %s FROM %sjob WHERE funcid = ? AND uniqkey = ?',
+                    (join q{, }, @query_cols ),
+                    $prefix;
+
+                my $sth = $dbh->prepare_cached($sql);
+                my $i = 1;
+                for my $where_col (@where_cols) {
+                    $sth->bind_param(
+                        $i++,
+                        $row->{$where_col},
+                        _bind_param_attr( $dbh, $prefix, $where_col ),
+                    );
+                }
+                $sth->execute();
+
+                # Strange if there would be more than one entry!
+                my @job_ids;
+                while ( my $ref = $sth->fetchrow_arrayref ) {
+                    push @job_ids, $ref->[0];
+
+                }
+                $sth->finish;
+                return $job_ids[0] if( @job_ids );
+            }
 
             my $row = $job->as_hashref;
             my @col = keys %{ $row };
@@ -331,11 +392,12 @@ sub insert {
             $sth->execute();
 
             $jobid = _insert_id( $dbh, $prefix, $sth, "${prefix}job", 'jobid' );
-        };
-        if( $EVAL_ERROR ) {
-            carp 'Error inserting job.: ' . $EVAL_ERROR;
-            carp 'We skip to next database.';
-        }
+        # };
+        # if( $EVAL_ERROR ) {
+        #     # carp 'Error inserting job.: ' . $EVAL_ERROR;
+        #     # carp 'We skip to next database.';
+        #     $log->debugf( 'TheSchwartz::JobScheduler::insert() Error inserting job. Skipping to next database. Error: %s', $EVAL_ERROR );
+        # }
 
         $log->debugf( 'TheSchwartz::JobScheduler::insert() jobid: %s', $jobid );
         return $jobid if defined $jobid;

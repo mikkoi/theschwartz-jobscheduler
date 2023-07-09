@@ -1,6 +1,7 @@
 #!perl
 # no critic (ControlStructures::ProhibitPostfixControls)
-## no critic (ValuesAndExpressions::ProhibitMagicNumbers)
+# no critic (ValuesAndExpressions::ProhibitMagicNumbers)
+# no critic (RegularExpressions::ProhibitComplexRegexes)
 
 use strict;
 use warnings;
@@ -117,13 +118,10 @@ sub build_managed_handle_config {
 # }
 
 my %test_dbs = build_test_dbs();
-subtest 'Insert Job and Verify' => sub {
-    # my $mh = Database::ManagedHandle->instance;
-    # my @test_dbs;
+
+subtest 'Insert Jobs With Same uniqkey, policy "no_check", and Receive an Exception' => sub {
     foreach my $driver (@drivers) {
         diag 'Testing with ' . $driver;
-        # my @dbs = @{$test_dbs{ $driver }};
-        # diag 'We have ' . @dbs . ' databases to test against.';
         my $get_dbh = sub {
             my ($id) = @_;
             my $db = $test_dbs{ $driver }->{ $id };
@@ -132,43 +130,84 @@ subtest 'Insert Job and Verify' => sub {
         my %databases;
         foreach my $id (keys %{ $test_dbs{ $driver } }) {
             $databases{ $id } = {
-                # dbh_callback => 'Database::ManagedHandle->instance',
                 dbh_callback => $get_dbh,
                 prefix => q{}
             };
         }
+
+        # Start
         my $client = TheSchwartz::JobScheduler->new(
             databases => \%databases,
+            opts => {
+                handle_uniqkey => 'no_check',
+                }
             );
 
-        # &{ $get_dbh }()->start_work;
-        my $jobid_1 = $client->insert('fetch', 'http://wassr.jp/');
-        # &{ $get_dbh }()->end_work;
-        is($jobid_1, 1, 'Job id is 1');
-
-        my $jobid_2 = $client->insert(
-            TheSchwartz::JobScheduler::Job->new(
-                funcname => 'fetch',
-                arg      => {type=>'site',url => 'http://pathtraq.com/'},
-                priority => 3,
-                )
+        my $job = TheSchwartz::JobScheduler::Job->new(
+            funcname => 'Test::uniqkey',
+            arg      => { an_item => 'value A' },
+            uniqkey  => 'UNIQUE_STR_A',
             );
-        is($jobid_2, 2, 'Job id is 2');
 
-        my @jobs = $client->list_jobs({ funcname => 'fetch'});
-        my $row = $jobs[0];
-        ok($row, 'Jobs[0] exists');
-        is($row->jobid,    1, 'jobs[0]->jobid is 1');
-        # is $row->funcid,   $client->funcname_to_id( $dbh, $prefix, 'fetch' );
-        is($row->arg,      'http://wassr.jp/', 'arg(scalar) is correct');
-        is($row->priority, undef, 'priority is correct');
+        my $jobid_1 = $client->insert( $job );
+        ok( $jobid_1, 'Got a job id');
 
-        $row = $jobs[1];
-        ok($row, 'Jobs[1] exists');
-        is($row->jobid,    2, 'jobs[0]->jobid is 2');
-        # is $row->funcid,   $client->funcname_to_id( $dbh, 'fetch' );
-        is($row->arg,      {type=>'site',url => 'http://pathtraq.com/'}, 'arg(hash) is correct');
-        is($row->priority, 3, 'priority is correct');
+        $job->arg( { an_item => 'value B' } );
+        ## no critic (RegularExpressions::RequireExtendedFormatting)
+        like(
+            dies { $client->insert( $job ); },
+            qr/DBD::[[:word:]]{1,}::st execute failed:/ms,
+            'Failed as expected',
+            );
+    }
+    done_testing;
+};
+
+subtest 'Insert Jobs With Same uniqkey, policy "acknowledge", and get same jobid' => sub {
+    foreach my $driver (@drivers) {
+        diag 'Testing with ' . $driver;
+        my $get_dbh = sub {
+            my ($id) = @_;
+            my $db = $test_dbs{ $driver }->{ $id };
+            return DBI->connect( $db->connection_info );
+        };
+        my %databases;
+        foreach my $id (keys %{ $test_dbs{ $driver } }) {
+            $databases{ $id } = {
+                dbh_callback => $get_dbh,
+                prefix => q{}
+            };
+        }
+
+        # Start
+        my $client = TheSchwartz::JobScheduler->new(
+            databases => \%databases,
+            opts => {
+                handle_uniqkey => 'acknowledge',
+                }
+            );
+
+        my $job = TheSchwartz::JobScheduler::Job->new(
+            funcname => 'Test::uniqkey',
+            arg      => { an_item => 'value A' },
+            uniqkey  => 'UNIQUE_STR_A',
+            );
+
+        my $jobid_1 = $client->insert( $job );
+        ok( $jobid_1, 'Got a job id');
+
+        $job->arg( { an_item => 'value B' } );
+        my $jobid_2 = $client->insert( $job );
+        ok( $jobid_2, 'Got a job id');
+
+        is( $jobid_1, $jobid_2, 'job ids are the same' );
+
+        # Create one more
+        $job->arg( { an_item => 'value C' } );
+        $job->uniqkey( undef );
+        my $jobid_3 = $client->insert( $job );
+        ok( $jobid_3, 'Got a job id');
+        ok( $jobid_3 > $jobid_2, 'New jobid is greater than previous' );
     }
     done_testing;
 };
