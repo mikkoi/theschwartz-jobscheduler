@@ -23,14 +23,15 @@ BEGIN {
 }
 use lib "$lib_path";
 
+use Module::Load qw( load );
+use DBI;
+
 # use Path::Tiny;
 
 # use TheSchwartz::JobScheduler::TestingUtils;
 use TheSchwartz::JobScheduler;
 
 use Test::Database::Temp;
-
-use Module::Load qw( load );
 
 # Luo temp db
 # Luo MaangedHandleConfig
