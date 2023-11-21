@@ -31,7 +31,7 @@ use DBI;
 # use TheSchwartz::JobScheduler::TestingUtils;
 use TheSchwartz::JobScheduler;
 
-use Test::Database::Temp;
+use Database::Temp;
 
 # Luo temp db
 # Luo MaangedHandleConfig
@@ -61,7 +61,7 @@ sub build_test_dbs {
     # my @test_dbs;
     my %test_dbs;
     foreach my $driver (@drivers) {
-        my $test_db = Test::Database::Temp->new(
+        my $test_db = Database::Temp->new(
             driver => $driver,
             init => sub {
                 my ($dbh, $name) = @_;

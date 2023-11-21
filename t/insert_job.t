@@ -22,26 +22,15 @@ BEGIN {
 }
 use lib "$lib_path";
 
-# use Path::Tiny;
-
-# use TheSchwartz::JobScheduler::TestingUtils;
-use TheSchwartz::JobScheduler;
-
-use Test::Database::Temp;
-
 use Module::Load qw( load );
 
-# Luo temp db
-# Luo MaangedHandleConfig
-# Alusta db
+use Database::Temp;
+
+use TheSchwartz::JobScheduler;
 
 my @drivers = qw( Pg SQLite );
 sub init_db {
     my ($driver, $dbh, $name) = @_;
-    # my $schema_path = File::Spec->catdir(($RealBin =~ /(.+)/msx)[0], q{.},
-    #         'schemas', "${driver}.sql");
-    # diag Dumper $schema_path;
-    # my $schema = path($schema_path)->slurp_utf8;
     my $module = "TheSchwartz::Database::Schemas::${driver}";
     load $module;
     my $schema = $module->new->schema;
@@ -59,20 +48,14 @@ sub build_test_dbs {
     # my @test_dbs;
     my %test_dbs;
     foreach my $driver (@drivers) {
-        my $test_db = Test::Database::Temp->new(
+        my $test_db = Database::Temp->new(
             driver => $driver,
             init => sub {
                 my ($dbh, $name) = @_;
                 init_db( $driver, $dbh, $name);
             },
         );
-        # diag 'Test database (' . $test_db->driver . ') ' . $test_db->name . " created.\n";
-        # push @test_dbs, $test_db;
-        # my @dbs;
-        # @dbs = @{ $test_dbs{$driver} } if( exists $test_dbs{$driver} );
-        # push @dbs, $test_db;
-        # $test_dbs{$driver} = \@dbs;
-        # my $name = $test_db->name
+        diag 'Test database (' . $test_db->driver . ') ' . $test_db->name . " created.\n";
         $test_dbs{$driver}->{ $test_db->name } = $test_db;
     }
     return %test_dbs;

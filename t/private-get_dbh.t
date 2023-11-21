@@ -12,7 +12,7 @@ set_encoding('utf8');
 use Data::Dumper;
 
 # Activate for testing
-use Log::Any::Adapter ('Stdout', log_level => 'debug' );
+# use Log::Any::Adapter ('Stdout', log_level => 'debug' );
 
 use FindBin 1.51 qw( $RealBin );
 use File::Spec;

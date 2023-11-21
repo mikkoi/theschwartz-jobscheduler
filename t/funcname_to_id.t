@@ -14,7 +14,6 @@ BEGIN {
 }
 use lib "$lib_path";
 
-# use TheSchwartz::JobScheduler::TestingUtils;
 use TheSchwartz::JobScheduler;
 
 subtest 'Code is syntactically correct' => sub {
