@@ -120,7 +120,7 @@ In that case, you can consider using the same database handle
 in both webapp and TheSchwartz. If you use database transactions
 to ensure an atomized commit, you can involve TheSchwartz::JobScheduler
 in the same transaction. If your transaction fails after worker task
-is inserted, then also the worker task gets cancelled.
+is inserted, then also the worker task gets cancelled (rollbacked).
 
 If, however, your TheSchwartz system is complex or otherwise separate
 from the systems which create the tasks, or you simply use more than one
