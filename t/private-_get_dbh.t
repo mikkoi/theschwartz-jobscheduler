@@ -1,6 +1,7 @@
 #!perl
 # no critic (ControlStructures::ProhibitPostfixControls)
 # no critic (ValuesAndExpressions::ProhibitMagicNumbers)
+## no critic (Subroutines::ProtectPrivateSubs)
 
 use strict;
 use warnings;
@@ -24,7 +25,7 @@ use lib "$lib_path";
 
 use TheSchwartz::JobScheduler;
 
-subtest 'TheSchwartz::JobScheduler::get_dbh() - CODE callback' => sub {
+subtest 'TheSchwartz::JobScheduler::_get_dbh() - CODE callback' => sub {
 
     #
     my $db_id = 'db_1_id';
@@ -36,25 +37,25 @@ subtest 'TheSchwartz::JobScheduler::get_dbh() - CODE callback' => sub {
             return;
         }
     };
-    my $dbh = TheSchwartz::JobScheduler::get_dbh( $db_id, $db_cb );
+    my $dbh = TheSchwartz::JobScheduler::_get_dbh( $db_id, $db_cb );
     is( $dbh, object { prop blessed => 'DBI::db' }, 'Object is as expected' );
 
     #
-    my $dbh_undef = TheSchwartz::JobScheduler::get_dbh( 'db_undef', $db_cb );
+    my $dbh_undef = TheSchwartz::JobScheduler::_get_dbh( 'db_undef', $db_cb );
     is( $dbh_undef, undef, 'Return is undef as expected' );
     done_testing;
 };
 
-subtest 'TheSchwartz::JobScheduler::get_dbh() - Package callback' => sub {
+subtest 'TheSchwartz::JobScheduler::_get_dbh() - Package callback' => sub {
     #
-    my $dbh = TheSchwartz::JobScheduler::get_dbh(
+    my $dbh = TheSchwartz::JobScheduler::_get_dbh(
             'db_1_id',
             'TestDatabaseHandleCallbackOne->new'
             );
     is( $dbh, object { prop blessed => 'DBI::db' }, 'Object is as expected' );
 
     #
-    my $dbh_undef = TheSchwartz::JobScheduler::get_dbh(
+    my $dbh_undef = TheSchwartz::JobScheduler::_get_dbh(
             'db_undef',
             'TestDatabaseHandleCallbackOne->new'
             );
@@ -64,14 +65,14 @@ subtest 'TheSchwartz::JobScheduler::get_dbh() - Package callback' => sub {
     ## no critic (RegularExpressions::RequireExtendedFormatting)
     ## no critic (RegularExpressions::ProhibitComplexRegexes)
     like(
-        dies { TheSchwartz::JobScheduler::get_dbh( 'db_wrong', 'NotExistingModule->new') },
+        dies { TheSchwartz::JobScheduler::_get_dbh( 'db_wrong', 'NotExistingModule->new') },
         qr/^Cannot load dbh_callback module 'NotExistingModule' .*/ms,
         'Failed as wanted'
         );
 
     #
     like(
-        dies { TheSchwartz::JobScheduler::get_dbh( 'db_wrong',
+        dies { TheSchwartz::JobScheduler::_get_dbh( 'db_wrong',
                 'TestDatabaseHandleCallbackOne->no_creator') },
         qr/^Cannot instantiate dbh_callback module 'TestDatabaseHandleCallbackOne->no_creator' .*/ms,
         'Failed as wanted'
@@ -79,7 +80,7 @@ subtest 'TheSchwartz::JobScheduler::get_dbh() - Package callback' => sub {
 
     #
     like(
-        dies { TheSchwartz::JobScheduler::get_dbh( 'sub_die',
+        dies { TheSchwartz::JobScheduler::_get_dbh( 'sub_die',
                 'TestDatabaseHandleCallbackOne->new') },
         qr/^Cannot get dbh from callback 'TestDatabaseHandleCallbackOne->new->dbh[(] sub_die [)]' .*/ms,
         'Failed as wanted'
