@@ -46,7 +46,7 @@ use warnings;
     my $client = TheSchwartz::JobScheduler->new(
         databases => \@databases,
         );
-    my $job_id = $client->insert('funcname', $arg);
+    my $job_id = $client->insert('funcname', 'arg');
 
     my $job1 = TheSchwartz::JobScheduler::Job->new;
     $job1->funcname("WorkerName");
@@ -254,10 +254,10 @@ use Module::Load qw( load );
 use Scalar::Util qw( refaddr );
 
 use Moo;
-use Log::Any qw( $log ), hooks => { build_context => [ \&build_context, ], };
+use Log::Any qw( $log ), hooks => { build_context => [ \&_build_context, ], };
 use Log::Any::Adapter::Util;
-sub build_context {
-    my ($level, $category, $data) = @_;
+sub _build_context {
+    # my ($level, $category, $data) = @_;
     my %ctx;
     my @caller = Log::Any::Adapter::Util::get_correct_caller();
     $ctx{file} = $caller[1];
@@ -266,6 +266,14 @@ sub build_context {
 }
 
 use TheSchwartz::JobScheduler::Job;
+
+=head2 databases
+
+The databases used by TheSchwartz.
+
+Please see above L</"Configuration: Databases and Their Handles">.
+
+=cut
 
 has databases => (
     is => 'ro',
@@ -276,6 +284,23 @@ has _funcmap => (
     is => 'ro',
     default => sub { {}; },
 );
+
+=head2 opts
+
+Additional options for controlling other features, including uniqkey.
+
+Please see above L<Uniqkey>.
+
+Example:
+
+    my $scheduler = TheSchwartz::JobScheduler->new(
+        databases => \@databases,
+        opts => {
+            handle_uniqkey => 'no_check',
+        },
+    );
+
+=cut
 
 has opts => (
     is => 'ro',
@@ -305,7 +330,7 @@ sub insert {
     foreach my $database_id ( keys %{ $databases } ) {
         my $db = $databases->{ $database_id };
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): db: %s', $db );
-        my $dbh = get_dbh( $database_id, $db->{ 'dbh_callback' } );
+        my $dbh = _get_dbh( $database_id, $db->{ 'dbh_callback' } );
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): dbh: %s', $dbh );
         my $prefix = $databases->{ $database_id }->{'prefix'};
         # $log->debugf( 'TheSchwartz::JobScheduler::insert(): prefix: %s', $prefix );
@@ -378,6 +403,12 @@ sub insert {
     return;
 }
 
+=head2 funcname_to_id
+
+Fetch function id from database. If not exists, then insert.
+
+=cut
+
 sub funcname_to_id {
     my ( $self, $dbh, $prefix, $funcname ) = @_;
     $log->debugf( 'TheSchwartz::JobScheduler::funcname_to_id(%s, %s, %s)', $dbh, $prefix, $funcname );
@@ -400,6 +431,10 @@ sub funcname_to_id {
             "INSERT INTO ${prefix}funcmap (funcname) VALUES (?)");
         local $EVAL_ERROR = undef;
         my $r = eval { $sth->execute($funcname) };
+        if( ! $r ) {
+            my $error = $EVAL_ERROR;
+            $log->warn( ' Unable to insert the funcname \'%s\'. Error: %s', $funcname, $error );
+        }
 
         my $id = _insert_id( $dbh, $prefix, $sth, "${prefix}funcmap", 'funcid' );
 
@@ -439,6 +474,16 @@ sub _insert_id {
     }
 }
 
+=head2 list_jobs
+
+Return a list of active jobs collected from all accessible databases.
+
+Parameters: A hash containing named parameters.
+
+    my @jobs = $client->list_jobs({ funcname => 'fetch_webpage'});
+
+=cut
+
 sub list_jobs {
     my ( $self, $arg ) = @_;
     $log->debugf( 'TheSchwartz::JobScheduler::list_jobs(%s)', $arg );
@@ -470,7 +515,7 @@ sub list_jobs {
     my $databases = $self->databases;
     foreach my $database_id ( keys %{ $databases } ) {
         my $db = $databases->{ $database_id };
-        my $dbh = get_dbh( $database_id, $db->{ 'dbh_callback' } );
+        my $dbh = _get_dbh( $database_id, $db->{ 'dbh_callback' } );
         my $prefix = $databases->{ $database_id }->{'prefix'};
 
         local $EVAL_ERROR = undef;
@@ -495,7 +540,12 @@ sub list_jobs {
                 $job->arg( $arg_tmp );
                 push @jobs, $job;
             }
+            1;
         };
+        if( ! $r ) {
+            my $error = $EVAL_ERROR;
+            $log->warn( ' Unable to fetch jobs for funcname \'%s\' (id: %s). Error: %s', $arg->{funcname}, $error );
+        }
     }
 
     $log->debugf( 'TheSchwartz::JobScheduler::list_jobs(): %s', \@jobs );
@@ -542,7 +592,7 @@ sub _cond_thaw {
     }
 }
 
-sub get_dbh {
+sub _get_dbh {
     my ($database_id, $dbh_callback) = @_;
 
     # my $cb = $dbh_callback;
