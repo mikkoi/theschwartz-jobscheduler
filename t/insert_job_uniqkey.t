@@ -22,6 +22,7 @@ use Module::Load qw( load );
 # Activate for testing
 # use Log::Any::Adapter ('Stdout', log_level => 'debug' );
 
+use DBI;
 use Test::Database::Temp;
 
 use TheSchwartz::JobScheduler;
@@ -31,7 +32,7 @@ use TheSchwartz::JobScheduler;
 #
 sub init_db {
     my ($dbh, $name, $info, $driver) = @_;
-    my $module = "TheSchwartz::JobScheduler::Database::Schemas::${driver}";
+    my $module = "TheSchwartz::JobScheduler::Test::Database::Schemas::${driver}";
     load $module;
     my $schema = $module->new->schema;
     $dbh->begin_work();
@@ -104,7 +105,8 @@ sub do_test {
         );
         my $get_dbh = sub {
             my ($id) = @_;
-            return DBI->connect( $test_dbs{ $id }->connection_info );
+            my ($dsn, $user, $pass, $attr) = $test_dbs{ $id }->connection_info;
+            return DBI->connect( $dsn, $user, $pass, $attr );
         };
         my %databases;
         foreach my $id (keys %test_dbs) {

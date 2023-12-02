@@ -22,6 +22,7 @@ use Module::Load qw( load );
 # Activate for testing
 # use Log::Any::Adapter ('Stdout', log_level => 'debug' );
 
+use DBI;
 use Test::Database::Temp;
 
 use TheSchwartz::JobScheduler;
@@ -31,7 +32,7 @@ use TheSchwartz::JobScheduler;
 #
 sub init_db {
     my ($dbh, $name, $info, $driver) = @_;
-    my $module = "TheSchwartz::JobScheduler::Database::Schemas::${driver}";
+    my $module = "TheSchwartz::JobScheduler::Test::Database::Schemas::${driver}";
     load $module;
     my $schema = $module->new->schema;
     $dbh->begin_work();
@@ -72,13 +73,10 @@ sub do_test {
             databases => \%databases,
             );
 
-        if( $db_driver ne 'SQLite' ) {
-            &{ $get_dbh }()->start_work;
-        }
+        # No transactions. We have autocommit active.
+        #     &{ $get_dbh }()->start_work;
         my $jobid_1 = $client->insert('fetch', 'https://example.com/');
-        if( $db_driver ne 'SQLite' ) {
-            &{ $get_dbh }()->end_work;
-        }
+        #     &{ $get_dbh }()->end_work;
         is($jobid_1, 1, 'Job id is 1');
 
         my $jobid_2 = $client->insert(
