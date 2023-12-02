@@ -1,4 +1,4 @@
-package TheSchwartz::Database::Schemas::Pg;
+package TheSchwartz::JobScheduler::Database::Schemas::Pg;
 use strict;
 use warnings;
 

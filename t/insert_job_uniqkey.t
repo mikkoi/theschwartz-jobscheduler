@@ -31,7 +31,7 @@ use TheSchwartz::JobScheduler;
 #
 sub init_db {
     my ($dbh, $name, $info, $driver) = @_;
-    my $module = "TheSchwartz::Database::Schemas::${driver}";
+    my $module = "TheSchwartz::JobScheduler::Database::Schemas::${driver}";
     load $module;
     my $schema = $module->new->schema;
     $dbh->begin_work();

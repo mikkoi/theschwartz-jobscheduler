@@ -1,4 +1,4 @@
-package TheSchwartz::Database::Schemas::SQLite;
+package TheSchwartz::JobScheduler::Database::Schemas::SQLite;
 use strict;
 use warnings;
 
