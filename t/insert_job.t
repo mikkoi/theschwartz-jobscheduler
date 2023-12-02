@@ -59,13 +59,11 @@ sub do_test {
         );
         my $get_dbh = sub {
             my ($id) = @_;
-            # my $db = $test_dbs{ $driver }->{ $id };
             return DBI->connect( $test_dbs{ $id }->connection_info );
         };
         my %databases;
         foreach my $id (keys %test_dbs) {
             $databases{ $id } = {
-                # dbh_callback => 'Database::ManagedHandle->instance',
                 dbh_callback => $get_dbh,
                 prefix => q{}
             };
@@ -74,9 +72,13 @@ sub do_test {
             databases => \%databases,
             );
 
-        # &{ $get_dbh }()->start_work;
+        if( $db_driver ne 'SQLite' ) {
+            &{ $get_dbh }()->start_work;
+        }
         my $jobid_1 = $client->insert('fetch', 'https://example.com/');
-        # &{ $get_dbh }()->end_work;
+        if( $db_driver ne 'SQLite' ) {
+            &{ $get_dbh }()->end_work;
+        }
         is($jobid_1, 1, 'Job id is 1');
 
         my $jobid_2 = $client->insert(
@@ -100,7 +102,6 @@ sub do_test {
         $row = $jobs[1];
         ok($row, 'Jobs[1] exists');
         is($row->jobid,    2, 'jobs[0]->jobid is 2');
-        # is $row->funcid,   $client->funcname_to_id( $dbh, 'fetch' );
         is($row->funcid,   $client->funcname_to_id( $dbh, $databases{ $db_name }->{'prefix'}, 'fetch' ), 'funcid matches with funcname_to_id()');
         is($row->arg,      {type => 'site', url => 'https://example.com/'}, 'arg(hash) is correct');
         is($row->priority, 3, 'priority is correct');
@@ -112,9 +113,9 @@ sub do_test {
         $row = $push_jobs[0];
         is($row->jobid,    3, 'jobs[0]->jobid is 3');
 
-        # This will through an exception but it is normal behaviour!
+        # This will throw an exception but it is normal behaviour!
         # DBD::Pg::st execute failed: ERROR:  duplicate key value violates unique constraint "funcmap_funcname_key"
-        # DETAIL:  Key (funcname)=(push) already exists. at /home/mikkoi/other/own_github/theschwartz-jobscheduler/lib/TheSchwartz/JobScheduler.pm line 430.
+        # DETAIL:  Key (funcname)=(push) already exists. [..].
         is($row->funcid,   $client->funcname_to_id( $dbh, $databases{ $db_name }->{'prefix'}, 'push' ), 'funcid matches with funcname_to_id()');
         is($row->arg,      'https://example.com/', 'arg(scalar) is correct');
         is($row->priority, undef, 'priority is correct');
@@ -135,10 +136,6 @@ Test::Database::Temp->use_all_available(
     build => sub {
         my ($driver) = @_;
         my %params = ( args => {} );
-        if( $driver eq 'SQLite' ) {
-            # $params{args}->{'dir'} = '/tmp/test_database_temp_MIKKO';
-            $params{cleanup} = 0;
-        }
         return \%params;
     },
     init => \&init_db,
