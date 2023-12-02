@@ -18,19 +18,6 @@ use warnings;
 
 =head1 SYNOPSIS
 
-    {
-        package TheSchwartz::JobScheduler::DBHandleProvider;
-        use strict; use warnings;
-        use Moo;
-        use Database::ManagedHandle;
-        sub dbh {
-            my ($self, $db_id) = @_;
-            my $mh1 = Database::ManagedHandle->instance;
-            return $mh1->dbh( $db_id );
-        }
-        1;
-    }
-
     use TheSchwartz::JobScheduler;
     my @databases = (
         { id => 'db_1', prefix => 'theschwartz_schema.', },
@@ -88,7 +75,7 @@ for instance, to share load and distribute jobs safely to only
 those workers who could, in turn, demand restricted access.
 This makes TheSchwartz very decentralized.
 
-If your setup is reasonably simply, for instance, a webapp,
+If your setup is reasonably simple, for instance, a webapp,
 e.g. L<Dancer2>, and L<TheSchwartz>
 as a worker system executing long running tasks which would
 disrupt the webapp, then perhaps you only use one database.
@@ -109,30 +96,51 @@ until it gets a working database handle.
 
 Database handles are provided by the calling program.
 This allows the caller to use any available system to provide
-the handles. In the example in L</SYNOPSIS> the calling
-program is using L<Database::ManagedHandle>, a module
-which makes certain that a database handle is always usable.
-Alternatively, if TheSchwartz::JobScheduler receives an C<undef>
+the handles. If TheSchwartz::JobScheduler receives an C<undef>
 instead of a database handle, it tries the next database.
 If there is no working database handles, it croaks.
 
 Database configuration does not need database addresses, dns:s
 or usernames and passwords. Because TheSchwartz::JobScheduler
 gets the database handle from outside, it only needs to know
-a database id to separate between databases and a possible
+a database id to separate between databases and possibly a 
 prefix for each database. Prefix is prepended to every
 database table and sequence name. If your database uses a different schema
 than the default one for TheSchwartz tables, use C<prefix>
 to solve this.
 
-    my @databases = (
-        {
-            id => 'db_1',
+    my %dbs = (
+        db_1 => [ 'dbi:SQLite:...', undef, undef, {} ],
+        db_2 => [ 'dbi:SQLite:...', undef, undef, {} ],
+    );
+    sub get_dbh {
+        my ($id) = @_;
+        my @connection_info = @{ $dbs->{ $id } };
+        return DBI->connect( @connection_info );
+    };
+    my %databases = (
+        db_1 => { prefix => 'theschwartz_schema.', dbh_callback => \&get_dbh, },
+        db_2 => { prefix => 'another_schema.', dbh_callback => \&get_dbh, },
+    );
+    use TheSchwartz::JobScheduler;
+    my $scheduler = TheSchwartz::JobScheduler->new(
+        \%databases, # databases
+        );
+
+In the following example the calling
+program is using L<Database::ManagedHandle>, a module
+which makes certain that a database handle is always usable.
+
+    # First create a Database::ManagedHandle config class
+    # See Database::ManagedHandle for instructions
+    # Then just use it:
+    my %databases = (
+        db_1 => {
             prefix => 'theschwartz_schema.',
             dbh_callback => 'Database::ManagedHandle->instance',
         },
+        db_2 => {
         {
-            id => 'db_2',
             prefix => 'another_schema.',
             dbh_callback => 'Database::ManagedHandle->instance',
         },
@@ -140,20 +148,8 @@ to solve this.
     use TheSchwartz::JobScheduler;
     my $scheduler = TheSchwartz::JobScheduler->new(
         \%databases, # databases
-        # $get_dbh,    # dbh_callback
     );
 
-    # Alternatively:
-    my $get_dbh = sub {
-        my ($id) = @_;
-        my $db = $dbs->{ $id };
-        return DBI->connect( $db->connection_info );
-    };
-    use TheSchwartz::JobScheduler;
-    my $scheduler = TheSchwartz::JobScheduler->new(
-        \%databases, # databases
-        $get_dbh,    # dbh_callback
-        );
 
 =head2 DBH Callback
 
@@ -245,7 +241,21 @@ consider other alternatives for this problem.>
         );
     $scheduler->insert( $job );
 
+=head2 Logging
+
+TheSchwartz::JobScheduler uses the excellent L<Log::Any> to produce logging messages.
+
+The easiest way to get the logging messages printed is to add the following line
+in the preamble of your program:
+
+    use Log::Any::Adapter ('Stdout', log_level => 'debug' );
+
+Alternative, you can do this on the command line:
+
+    perl '-MLog::Any::Adapter(Stdout, log_level=>trace)' 
+
 =cut
+
 
 use Carp;
 use English '-no_match_vars';

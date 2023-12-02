@@ -31,7 +31,7 @@ use Moo;
 
 =head1 DESCRIPTION
 
-A TheSchwartz Job class makes it easier to create jobs with different parameters.
+The Job class makes it easier to create TheSchwartz jobs with different parameters.
 
 =head1 METHODS
 
@@ -98,14 +98,5 @@ has grabbed_until => ( is => 'rw', default => sub { 0 }, );
 has priority      => ( is => 'rw', default => sub { undef }, );
 has coalesce      => ( is => 'rw', default => sub { undef }, );
 has funcname      => ( is => 'rw', default => sub { undef }, );
-
-# around BUILDARGS => sub {
-#     my ( $orig, $class, @args ) = @_;
-#
-#     return { attr1 => $args[0] }
-#         if @args == 1 && !ref $args[0];
-#
-#     return $class->$orig(@args);
-# };
 
 1;
