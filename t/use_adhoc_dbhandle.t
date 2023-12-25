@@ -42,8 +42,7 @@ sub init_db {
 # ##############################################################################
 # Test
 #
-# In this test we create first two databases
-# and a Database::ManagedHandle config.
+# In this test we create first two databases.
 # Pointers to the databases are in @test_dbs.
 # ManagedConfig only has connection info.
 # When @test_dbs goes undef, the databases drop.
@@ -65,36 +64,16 @@ BEGIN {
         diag 'Test database (' . $test_db->driver . ') ' . $test_db->name . " created.\n";
         push @test_dbs, $test_db;
     }
-    {
-        package TheSchwartz::JobScheduler::Test::Database::ManagedHandleConfig;
-        use strict;
-        use warnings;
-        use Moo;
-        has config => (
-            is => 'ro',
-            default => sub {
-                my %cfg = (
-                    'default' => $test_dbs[0]->name(),
-                );
-                foreach (@test_dbs) {
-                    my $name = $_->name();
-                    my @info = $_->connection_info();
-                    my %c;
-                    @c{'dsn','username','password','attr'} = @info;
-                    $cfg{'databases'}->{$name} = \%c;
-                }
-                return \%cfg;
-            },
-        );
-
-        1;
-    }
-    ## no critic (Variables::RequireLocalizedPunctuationVars)
-    $ENV{DATABASE_MANAGED_HANDLE_CONFIG}
-            = 'TheSchwartz::JobScheduler::Test::Database::ManagedHandleConfig';
 }
 
-use Database::ManagedHandle;
+# use Database::ManagedHandle;
+use DBI;
+
+sub get_dbh {
+    my ($db_id) = @_;
+    my ($db) = grep { $_->name eq $db_id; } @test_dbs;
+    return DBI->connect( $db->connection_info );
+}
 
 subtest 'Testing' => sub {
     my %databases;
@@ -105,14 +84,13 @@ subtest 'Testing' => sub {
     }
     my $scheduler = TheSchwartz::JobScheduler->new(
         databases => \%databases,
-        dbh_callback => 'Database::ManagedHandle->instance',
         );
 
     my $job1 = TheSchwartz::JobScheduler::Job->new(
         funcname => 'fetch',
         arg      => {type => 'site', url => 'https://example.com/1'},
         );
-    my $jobid_1 = $scheduler->insert( job => $job1);
+    my $jobid_1 = $scheduler->insert( job => $job1, dbh_callback => \&get_dbh, );
     is($jobid_1, 1, 'Job id is 1');
 
     my $jobid_2 = $scheduler->insert(
@@ -121,20 +99,19 @@ subtest 'Testing' => sub {
                     arg      => {type => 'site', url => 'https://example.com/2'},
                     priority => 3,
                     ),
+        dbh_callback => \&get_dbh,
         );
     is($jobid_2, 2, 'Job id is 2');
 
     my @jobs = $scheduler->list_jobs(
         search_params => { funcname => 'fetch'},
+        dbh_callback => \&get_dbh,
     );
-    # use Data::Dumper;
-    # diag Dumper \@jobs;
     is(scalar @jobs, 2, 'two jobs with funcname fetch');
     my $row = $jobs[0];
     ok($row, 'Jobs[0] exists');
     is($row->jobid,    1, 'jobs[0]->jobid is 1');
     is($row->arg,      {type => 'site', url => 'https://example.com/1'}, 'arg(hash) is correct');
-    # is($row->arg,      'https://example.com/1', 'arg(scalar) is correct');
     is($row->priority, undef, 'priority (default: undef) is correct');
 
     $row = $jobs[1];
@@ -149,10 +126,12 @@ subtest 'Testing' => sub {
                     arg      => {type => 'site', url => 'https://example.com/3'},
                     priority => 2,
                     ),
+        dbh_callback => \&get_dbh,
     );
 
     my @push_jobs = $scheduler->list_jobs(
         search_params => { funcname => 'push'},
+        dbh_callback => \&get_dbh,
     );
     is(scalar @push_jobs, 1, 'two jobs with funcname fetch');
     $row = $push_jobs[0];

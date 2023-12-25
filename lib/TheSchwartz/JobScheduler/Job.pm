@@ -29,9 +29,11 @@ use Moo;
         arg => { foo => 'baz' },
         );
 
+
 =head1 DESCRIPTION
 
 The Job class makes it easier to create TheSchwartz jobs with different parameters.
+
 
 =head1 METHODS
 
